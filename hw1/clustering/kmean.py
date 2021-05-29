@@ -1,39 +1,69 @@
 from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
 import gensim
-import numpy
+import pickle
 import time
+import numpy as np
 import matplotlib.pyplot as plt
+
+# use num_point to show the
+num_point = 50
+
+
+def get_key(list, value):
+    for i in range(len(list)):
+        times = 10
+        for j in range(10):
+            if abs(list[i][j]-value[j]) < 0.01:
+                times -= 1
+            if times == 0:
+                return key
+    return 0
 
 
 def cluster():
     # load the model
-    model = gensim.models.KeyedVectors.load_word2vec_format('/home/chenyiwei/hws/Assignment/dataset/pubmed_vectors_word2vec.txt')
+    model = gensim.models.KeyedVectors.load_word2vec_format(
+        '/home/chenyiwei/hws/Assignment/dataset/wiki_vectors_word2vec.txt', binary=False)
     keys = model.wv.vocab.keys()
+    with open('./word_list', 'rb') as f:
+        word_list = pickle.load(f)
     # load wordvector for each key in the model
-    dataSet = []
-    for key in keys:
-        dataSet.append(model[key])
-    # for diff k, to do the cluster algorithm
-    for k in range(5, 10):
-        clf = KMeans(n_clusters=k)
-        clf.fit(dataSet)
-        cents = clf.centroids  # 质心
-        labels = clf.labels  # 样本点被分配到的簇的索引
-        sse = clf.sse
-        # 画出聚类结果，每一类用一种颜色
-        colors = ['b', 'g', 'r', 'k', 'c', 'm', 'y', '#e24fff', '#524C90', '#845868']
-        # n_clusters = 10
-        for i in range(k):
-            index = np.nonzero(labels == i)[0]
-            x0 = X[index, 0]
-            x1 = X[index, 1]
-            y_i = y[index]
-            for j in range(len(x0)):
-                plt.text(x0[j], x1[j], str(int(y_i[j])), color=colors[i], fontdict={'weight': 'bold', 'size': 9})
-            plt.scatter(cents[i, 0], cents[i, 1], marker='x', color=colors[i], linewidths=12)
-        plt.title("SSE={:.2f}".format(sse))
-        plt.axis([-30, 30, -30, 30])
-        plt.savefig('./'+str(k)+'cluster.jpg')
+    dataset = []
+    for word in word_list:
+        dataset.append(model.wv[word])
+    dataset_embedded = TSNE(n_components=2, early_exaggeration=6).fit_transform(dataset)
+    # for diff num of clusters, to do the cluster algorithm
+    for num_cluster in range(2, 8):
+        # do the kmeans algorithm
+        km_cluster = KMeans(n_clusters=num_cluster, max_iter=1000, init='k-means++')
+        km_cluster.fit(dataset)
+        # start draw the image
+        cents = km_cluster.cluster_centers_  # the centroid
+        '''for cent in cents:
+            idx = get_key(dataset, cent)
+            print(idx)
+            plt.scatter(dataset_embedded[idx][0], dataset_embedded[idx][1], c='r', marker='*')'''
+        labels = km_cluster.labels_
+        mark = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+        j = 0   # to count the point in the dataset
+        '''flag = 0   # to judge which cluster should the point belog
+        n_p = 0    # to count how many point already been drew
+        for label in labels:
+            if flag == num_cluster:
+                break
+            if label == flag:
+                plt.scatter(dataset_embedded[j][0], dataset_embedded[j][1], c=mark[label])
+                n_p += 1
+            if n_p == num_point:
+                n_p = 0
+                flag += 1
+            j += 1'''
+        for label in labels:
+            plt.scatter(dataset_embedded[j][0], dataset_embedded[j][1], c=mark[label])
+            j += 1
+        plt.title('k-means '+str(num_cluster)+' clusters', fontsize=20)
+        plt.savefig('./pub_image/' + str(num_cluster) + '_cluster1.jpg')
         plt.show()
 
 
