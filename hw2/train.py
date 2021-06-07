@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.testing._private.utils import import_nose
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -14,6 +15,8 @@ from transformers import RobertaTokenizer, RobertaForSequenceClassification
 import os
 import argparse
 from transformers import AdamW, get_linear_schedule_with_warmup
+from sklearn.metrics import classification_report
+import tqdm
 warnings.filterwarnings('ignore')
 tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
 
@@ -29,8 +32,8 @@ args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #data read
-train_data = pd.read_csv('./train.tsv',delimiter='\t',header=None)
-test_data = pd.read_csv('./test.tsv',delimiter='\t',header=None)[:1820]
+train_data = pd.read_csv('./train.tsv',delimiter='\t',header=None)[:100]
+test_data = pd.read_csv('./test.tsv',delimiter='\t',header=None)[:20] #[:1820]
 
 
 
@@ -77,11 +80,9 @@ def train(model,epoch,train_data_loader,test_data_loader):
         model.train()
         correct = 0
         running_loss = 0.
-        for idx,(data,mask,label) in enumerate(train_data_loader):
+        for (data,mask,label) in tqdm.tqdm(train_data_loader):
 
             data,mask ,label = torch.tensor(data).to(device),torch.tensor(mask).to(device),torch.tensor(label).to(device)
-            print(data.shape)
-            print(mask.shape)
             outputs = model(input_ids=data,attention_mask = mask,labels=label)
 
             loss = outputs.loss
@@ -100,13 +101,15 @@ def train(model,epoch,train_data_loader,test_data_loader):
 
         print('ACC:',correct/(len(train_data_loader)*args.batch_size))
         print('loss:',running_loss)
-        acc = test(model,test_data_loader)
+        acc,predict = test(model,test_data_loader)
+        print(classification_report(test_labels,predict,digits=6))
         # # torch.save(model,'./model_every_epoch.pkl')
         # print('model saved')
 
 
 def test(model,test_data_loader):
     model.eval()
+    predict = []
     with torch.no_grad():
         correct = 0
         loss = 0
@@ -118,11 +121,12 @@ def test(model,test_data_loader):
             loss += outputs.loss.item()
             logits = outputs.logits
             _,predicted = torch.max(logits,1)
+            predict.extend(predicted.cpu().numpy().tolist())
             correct += (predicted == label).sum().item()
         print('ACC:', correct /(len(test_data_loader)*args.batch_size), 'Running_loss:',loss)
         model.zero_grad()
         
-    return correct /(len(test_data_loader)*args.batch_size)
+    return correct /(len(test_data_loader)*args.batch_size),predict
 
 from torch.utils.data import DataLoader
 
@@ -134,4 +138,4 @@ test_data = torch.utils.data.dataset.TensorDataset(torch.tensor(test_data_input)
 train_data_loader = DataLoader(train_data, batch_size=args.batch_size)
 test_data_loader = DataLoader(test_data, batch_size=args.batch_size)
 
-train(model,epoch = 10,train_data_loader=train_data_loader,test_data_loader=test_data_loader)
+train(model,epoch = 15,train_data_loader=train_data_loader,test_data_loader=test_data_loader)
